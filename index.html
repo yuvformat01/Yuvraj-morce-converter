@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Yuvraj Morse Converter</title>
+    <style>
+        body{
+            background:black;
+            color:lime;
+            font-family:monospace;
+            text-align:center;
+            padding-top:60px;
+        }
+        input,button{
+            padding:12px;
+            font-size:18px;
+            margin:10px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Welcome to Yuvraj's Morse Converter</h1>
+
+<input id="text" placeholder="Type text here">
+<br>
+<button onclick="convert()">Convert</button>
+
+<h2 id="out"></h2>
+
+<script>
+const morse={
+A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',
+F:'..-.',G:'--.',H:'....',I:'..',J:'.---',
+K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',
+P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',
+U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',
+Z:'--..',
+0:'-----',1:'.----',2:'..---',3:'...--',
+4:'....-',5:'.....',6:'-....',7:'--...',
+8:'---..',9:'----.',
+' ':'/'
+};
+
+function convert(){
+let t=document.getElementById("text").value.toUpperCase();
+let r="";
+for(let i=0;i<t.length;i++){
+r+= (morse[t[i]]||'?')+" ";
+}
+document.getElementById("out").innerHTML=r+"<br><br>Sent by Yuvraj Converter";
+}
+</script>
+
+</body>
+</html>
