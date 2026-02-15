@@ -3,41 +3,23 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Yuvraj</title>
-
 <style>
-body{
-  background:black;
-  color:#00ff00;
-  font-family:monospace;
-  padding:15px;
-}
-#terminal{
-  white-space:pre-wrap;
-  margin-bottom:12px;
-}
-input{
-  background:black;
-  color:#00ff00;
-  border:none;
-  outline:none;
-  font-size:16px;
-  width:100%;
-  padding:10px 0;
-}
-.block{
-  margin:18px 0;
-  padding:8px;
-  border-left:3px solid #00ff00;
-}
+body{background:black;color:#00ff00;font-family:monospace;padding:15px;}
+#terminal{white-space:pre-wrap;margin-bottom:12px;}
+input{background:black;color:#00ff00;border:none;outline:none;font-size:16px;width:100%;padding:10px 0;}
+.block{margin:18px 0;padding:8px;border-left:3px solid #00ff00;}
 .small{opacity:.7}
+.bar{display:block;height:10px;background:#003300;margin:8px 0;position:relative}
+.bar>span{display:block;height:100%;background:#00ff00;width:0%}
 </style>
 </head>
 <body>
 
 <div id="terminal"></div>
-<input id="input" placeholder="Type here...">
+<input id="input" placeholder="Enter password...">
 
 <script>
+/* --- Morse maps --- */
 const morse={
 A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',
 F:'..-.',G:'--.',H:'....',I:'..',J:'.---',
@@ -50,180 +32,255 @@ Z:'--..',
 8:'---..',9:'----.',
 ' ':'/'
 };
-
 const reverseDict=Object.fromEntries(Object.entries(morse).map(([k,v])=>[v,k]));
 
+/* --- state --- */
 let count=0;
 let history=[];
-let loginStage=0;
+let loginStage=0;     // 0 boot, 1 ask pass, 2 unlocked
 let attempts=0;
-let user="";
 let lastOutput="";
-let audioCtx;
+let audioCtx=null;
+let beepSpeed=1.0;    // 1 normal, 0.7 fast, 1.4 slow
+let wordCount=0;
 
+/* --- DOM --- */
 const term=document.getElementById("terminal");
 const input=document.getElementById("input");
-
 function print(t){ term.innerHTML+=t+"<br>"; }
 
-/* SOUND FIX */
+/* --- persistent history --- */
+function saveHistory(){
+  localStorage.setItem("yuvraj_history", JSON.stringify(history));
+}
+function loadHistory(){
+  const h=localStorage.getItem("yuvraj_history");
+  if(h){
+    history=JSON.parse(h);
+    history.forEach(b=>print(b));
+  }
+}
+
+/* --- audio --- */
+function ensureAudio(){
+  try{
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended") audioCtx.resume();
+  }catch(e){}
+}
 function beep(dot=true){
-try{
-if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-const osc=audioCtx.createOscillator();
-osc.type="sine";
-osc.frequency.value=800;
-osc.connect(audioCtx.destination);
-osc.start();
-setTimeout(()=>osc.stop(), dot?90:220);
-}catch(e){}
+  try{
+    ensureAudio();
+    if(!audioCtx) return;
+    const osc=audioCtx.createOscillator();
+    const gain=audioCtx.createGain();
+    osc.type="sine";
+    osc.frequency.value=800;
+    gain.gain.value=0.2;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start();
+    setTimeout(()=>osc.stop(), (dot?90:220)*beepSpeed);
+  }catch(e){}
+}
+/* typing tick */
+function tick(){
+  try{
+    ensureAudio();
+    if(!audioCtx) return;
+    const osc=audioCtx.createOscillator();
+    const gain=audioCtx.createGain();
+    osc.type="square";
+    osc.frequency.value=1200;
+    gain.gain.value=0.03;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start();
+    setTimeout(()=>osc.stop(),30);
+  }catch(e){}
+}
+input.addEventListener("keydown",(e)=>{ if(e.key.length===1) tick(); });
+
+/* --- themes --- */
+function setTheme(name){
+  const map={
+    hacker:{fg:"#00ff00",bg:"#000000",bar:"#00ff00"},
+    blue:{fg:"#4da6ff",bg:"#000000",bar:"#4da6ff"},
+    red:{fg:"#ff4d4d",bg:"#000000",bar:"#ff4d4d"},
+    yellow:{fg:"#ffff66",bg:"#000000",bar:"#ffff66"},
+    white:{fg:"#ffffff",bg:"#000000",bar:"#ffffff"}
+  };
+  const t=map[name];
+  if(!t) return;
+  document.body.style.color=t.fg;
+  document.body.style.background=t.bg;
+  input.style.color=t.fg;
+  document.querySelectorAll(".bar>span").forEach(s=>s.style.background=t.bar);
 }
 
-/* LOADING SCREEN */
+/* --- loading (7 sec) --- */
 function loading(){
-let i=0;
-term.innerHTML="<b>Welcome to Yuvraj's Code Converter</b><br><br>";
-let bar=setInterval(()=>{
-term.innerHTML+="Loading: "+i+"%<br>";
-i++;
-if(i>100){
-clearInterval(bar);
-term.innerHTML+="<br>System Ready<br><br>";
-startSystem();
-}
-},15);
+  term.innerHTML="<b>Welcome to Yuvraj's Code Converter</b><br>";
+  const bar=document.createElement("div");
+  bar.className="bar";
+  const fill=document.createElement("span");
+  bar.appendChild(fill);
+  term.appendChild(bar);
+  let i=0;
+  const interval=70; // 70ms * 100 = 7000ms
+  const timer=setInterval(()=>{
+    i++;
+    fill.style.width=i+"%";
+    print("Loading: "+i+"%");
+    if(i>=100){
+      clearInterval(timer);
+      print("<br>System Ready<br>");
+      startSystem();
+    }
+  },interval);
 }
 
-function startSystem(){
-print("Type anything to convert");
-print("Commands: help");
-}
-
-/* BOOT */
+/* --- boot / login --- */
 function boot(){
-print("Booting Secure Morse System...");
-setTimeout(()=>print("Loading modules..."),400);
-setTimeout(()=>print("System ready"),900);
-setTimeout(()=>{
-print("<br>Username:");
-loginStage=1;
-},1300);
+  print("Booting Secure Morse System...");
+  setTimeout(()=>print("Loading modules..."),400);
+  setTimeout(()=>print("System ready"),900);
+  setTimeout(()=>{
+    print("<br>Password:");
+    input.placeholder="Enter password...";
+    loginStage=1;
+  },1300);
 }
-
 boot();
 
-/* LIVE PREVIEW */
+function lockSystem(){
+  loginStage=1;
+  input.placeholder="Enter password...";
+  print("<br>Locked. Enter Password:");
+}
+
+/* --- start --- */
+function startSystem(){
+  input.placeholder="Type here...";
+  print("Type anything to convert");
+  print("Commands: help");
+  loadHistory();
+}
+
+/* --- live preview --- */
 input.addEventListener("input",function(){
-if(loginStage!==3) return;
-let val=input.value.trim();
-if(!val) return;
+  if(loginStage!==2) return;
+  let val=input.value.trim();
+  if(!val) return;
 
-let isMorse=/^[.\-\/\s]+$/.test(val);
-let preview="";
-
-if(isMorse){
-let parts=val.split(" ");
-parts.forEach(p=>preview+=reverseDict[p]||'?');
-}else{
-for(let i=0;i<val.length;i++){
-preview+=(morse[val[i].toUpperCase()]||'?')+" ";
-}
-}
-
-document.getElementById("preview")?.remove();
-let d=document.createElement("div");
-d.id="preview";
-d.className="small";
-d.innerText=preview;
-term.appendChild(d);
+  let isMorse=/^[.\-\/\s]+$/.test(val);
+  let preview="";
+  if(isMorse){
+    let parts=val.split(" ");
+    parts.forEach(p=>preview+=reverseDict[p]||'?');
+  }else{
+    for(let i=0;i<val.length;i++){
+      preview+=(morse[val[i].toUpperCase()]||'?')+" ";
+    }
+  }
+  document.getElementById("preview")?.remove();
+  let d=document.createElement("div");
+  d.id="preview";
+  d.className="small";
+  d.innerText=preview;
+  term.appendChild(d);
 });
 
+/* --- key handler --- */
 input.addEventListener("keydown",function(e){
-if(e.key!=="Enter") return;
+  if(e.key!=="Enter") return;
+  let val=input.value.trim();
+  input.value="";
 
-let val=input.value.trim();
-input.value="";
+  /* password only */
+  if(loginStage===1){
+    print("Checking credentials...");
+    setTimeout(()=>{
+      if(val==="Yuvraj"){
+        print("Access Granted");
+        loginStage=2;
+        loading();
+      }else{
+        attempts++;
+        print("Access Denied");
+        if(attempts>=3){
+          print("System Locked");
+          input.disabled=true;
+        }else{
+          print("Password:");
+        }
+      }
+    },600);
+    return;
+  }
 
-/* LOGIN */
-if(loginStage===1){
-user=val;
-print(val);
-print("Password:");
-loginStage=2;
-return;
-}
+  if(loginStage!==2) return;
 
-if(loginStage===2){
-print("Checking credentials...");
-setTimeout(()=>{
-if(user==="yuvraj" && val==="123"){
-print("Access Granted");
-loginStage=3;
-loading();
-}else{
-attempts++;
-print("Access Denied");
-if(attempts>=3){
-print("System Locked");
-input.disabled=true;
-}else{
-print("Username:");
-loginStage=1;
-}
-}
-},700);
-return;
-}
+  /* commands */
+  if(val==="help"){
+    print("help, history, stats, reset, clear, time, date, copy, download, lock");
+    print("theme hacker|blue|red|yellow|white");
+    print("speed slow|normal|fast");
+    return;
+  }
+  if(val==="clear"){ term.innerHTML=""; return; }
+  if(val==="reset"){ history=[]; count=0; wordCount=0; saveHistory(); print("Reset done"); return; }
+  if(val==="stats"){ print("Total conversions: "+count+" | Words typed: "+wordCount); return; }
+  if(val==="time"){ print(new Date().toLocaleTimeString()); return; }
+  if(val==="date"){ print(new Date().toDateString()); return; }
+  if(val==="history"){ history.forEach(h=>print(h)); return; }
+  if(val==="copy"){ navigator.clipboard.writeText(lastOutput||""); print("Copied"); return; }
+  if(val==="download"){
+    const text=history.join("\n").replace(/<[^>]*>/g,'');
+    const blob=new Blob([text],{type:"text/plain"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="morse_history.txt";
+    a.click();
+    return;
+  }
+  if(val==="lock"){ lockSystem(); return; }
+  if(val.startsWith("theme ")){ setTheme(val.split(" ")[1]); return; }
+  if(val.startsWith("speed ")){
+    const s=val.split(" ")[1];
+    if(s==="slow") beepSpeed=1.4;
+    else if(s==="fast") beepSpeed=0.7;
+    else beepSpeed=1.0;
+    print("Beep speed set: "+s);
+    return;
+  }
 
-if(loginStage!==3) return;
+  /* convert */
+  count++;
+  let isMorse=/^[.\-\/\s]+$/.test(val);
+  wordCount+=val.split(/\s+/).filter(Boolean).length;
 
-/* COMMANDS */
-if(val==="help"){
-print("help, history, stats, reset, clear, time, date, copy, color red/green/blue");
-return;
-}
-if(val==="clear"){ term.innerHTML=""; return; }
-if(val==="reset"){ history=[]; count=0; print("Reset done"); return; }
-if(val==="stats"){ print("Total conversions: "+count); return; }
-if(val==="time"){ print(new Date().toLocaleTimeString()); return; }
-if(val==="date"){ print(new Date().toDateString()); return; }
-if(val==="history"){ history.forEach(h=>print(h)); return; }
-if(val==="copy"){ navigator.clipboard.writeText(lastOutput); print("Copied"); return; }
-
-if(val.startsWith("color ")){
-let c=val.split(" ")[1];
-document.body.style.color=c;
-input.style.color=c;
-return;
-}
-
-/* CONVERT */
-count++;
-let isMorse=/^[.\-\/\s]+$/.test(val);
-let block="<div class='block'><b>"+count+". "+val+"</b><br>";
-
-if(isMorse){
-let parts=val.split(" ");
-let out="";
-parts.forEach(p=>out+=reverseDict[p]||'?');
-lastOutput=out;
-block+="<span class='small'>"+out+"</span>";
-beep();
-}else{
-let res="";
-for(let i=0;i<val.length;i++){
-let code=morse[val[i].toUpperCase()]||'?';
-res+=code+" ";
-if(code===".") beep(true);
-if(code==="-") beep(false);
-}
-lastOutput=res;
-block+="<span class='small'>"+res+"</span>";
-}
-
-block+="</div>";
-history.push(block);
-print(block);
+  let block="<div class='block'><b>"+count+". "+val+"</b><br>";
+  if(isMorse){
+    let parts=val.split(" ");
+    let out="";
+    parts.forEach(p=>out+=reverseDict[p]||'?');
+    lastOutput=out;
+    block+="<span class='small'>"+out+"</span>";
+    beep(true);
+  }else{
+    let res="";
+    for(let i=0;i<val.length;i++){
+      let code=morse[val[i].toUpperCase()]||'?';
+      res+=code+" ";
+      if(code===".") beep(true);
+      if(code==="-") beep(false);
+    }
+    lastOutput=res;
+    block+="<span class='small'>"+res+"</span>";
+  }
+  block+="</div>";
+  history.push(block);
+  saveHistory();
+  print(block);
 });
 </script>
 </body>
