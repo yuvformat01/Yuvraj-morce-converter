@@ -1,31 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Yuvraj Morse Converter</title>
-    <style>
-        body{
-            background:black;
-            color:lime;
-            font-family:monospace;
-            text-align:center;
-            padding-top:60px;
-        }
-        input,button{
-            padding:12px;
-            font-size:18px;
-            margin:10px;
-        }
-    </style>
+<title>Yuvraj Morse System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body{
+  background:#000;
+  color:#00ff00;
+  font-family:monospace;
+  padding:12px;
+}
+#terminal{
+  white-space:pre-wrap;
+  margin-bottom:10px;
+  line-height:1.4;
+}
+input{
+  background:#000;
+  color:#00ff00;
+  border:none;
+  outline:none;
+  font-family:monospace;
+  width:100%;
+  font-size:16px;
+  padding:8px 0;
+}
+</style>
 </head>
 <body>
 
-<h1>Welcome to Yuvraj's Morse Converter</h1>
-
-<input id="text" placeholder="Type text here">
-<br>
-<button onclick="convert()">Convert</button>
-
-<h2 id="out"></h2>
+<div id="terminal"></div>
+<input id="input" autofocus placeholder="Type here...">
 
 <script>
 const morse={
@@ -40,15 +45,150 @@ Z:'--..',
 8:'---..',9:'----.',
 ' ':'/'
 };
+const reverseDict = Object.fromEntries(Object.entries(morse).map(([k,v])=>[v,k]));
 
-function convert(){
-let t=document.getElementById("text").value.toUpperCase();
-let r="";
-for(let i=0;i<t.length;i++){
-r+= (morse[t[i]]||'?')+" ";
+let history=[];
+let count=0;
+let logged=false;
+let currentColor="#00ff00";
+
+const term=document.getElementById("terminal");
+const input=document.getElementById("input");
+
+function print(t){
+  term.innerHTML+=t+"<br>";
+  window.scrollTo(0,document.body.scrollHeight);
 }
-document.getElementById("out").innerHTML=r+"<br><br>Sent by Yuvraj Converter";
+
+function setColor(name){
+  const map={
+    green:"#00ff00",
+    red:"#ff4d4d",
+    blue:"#4da6ff",
+    yellow:"#ffff66",
+    white:"#ffffff",
+    aqua:"#66ffff",
+    purple:"#cc66ff"
+  };
+  if(map[name]){
+    currentColor=map[name];
+    document.body.style.color=currentColor;
+    input.style.color=currentColor;
+    print("Color changed to "+name);
+  }else{
+    print("Available: green, red, blue, yellow, white, aqua, purple");
+  }
 }
+
+function beepSequence(code){
+  let i=0;
+  function beep(){
+    if(i>=code.length) return;
+    const c=code[i++];
+    if(c==='.' || c==='-'){
+      try{
+        const ctx=new (window.AudioContext||window.webkitAudioContext)();
+        const osc=ctx.createOscillator();
+        osc.connect(ctx.destination);
+        osc.start();
+        setTimeout(()=>{osc.stop();ctx.close();}, c==='.'?100:250);
+      }catch(e){}
+      setTimeout(beep, c==='.'?140:300);
+    }else{
+      setTimeout(beep,120);
+    }
+  }
+  beep();
+}
+
+function loading(){
+  let i=0;
+  let bar=setInterval(()=>{
+    term.innerHTML="Loading: "+i+"%";
+    i++;
+    if(i>100){
+      clearInterval(bar);
+      term.innerHTML="";
+      startSystem();
+    }
+  },20);
+}
+
+function startSystem(){
+  print("=== Yuvraj Morse System ===");
+  print("Type text to convert");
+  print("Commands:");
+  print("history | reset | stats | reverse ....");
+  print("color green/red/blue/yellow/white/aqua/purple");
+  print("clear");
+}
+
+print("Welcome to Yuvraj Secure Morse System");
+print("Enter password:");
+
+input.addEventListener("keydown",function(e){
+if(e.key==="Enter"){
+let val=input.value.trim();
+input.value="";
+
+if(!logged){
+  if(val==="yuvraj"){
+    logged=true;
+    print("Access Granted");
+    loading();
+  }else{
+    print("Wrong password");
+  }
+  return;
+}
+
+if(val==="history"){
+  history.forEach(h=>print(h));
+  return;
+}
+
+if(val==="reset"){
+  history=[];
+  count=0;
+  print("Reset done");
+  return;
+}
+
+if(val==="stats"){
+  print("Total conversions: "+count);
+  return;
+}
+
+if(val==="clear"){
+  term.innerHTML="";
+  return;
+}
+
+if(val.startsWith("color ")){
+  setColor(val.split(" ")[1].toLowerCase());
+  return;
+}
+
+if(val.startsWith("reverse ")){
+  let code=val.replace("reverse ","").trim().split(" ");
+  let out="";
+  code.forEach(c=> out+=reverseDict[c]||'?');
+  print(out);
+  return;
+}
+
+count++;
+let res="";
+for(let i=0;i<val.length;i++){
+  res+=(morse[val[i].toUpperCase()]||'?')+" ";
+}
+let line=count+". "+res;
+history.push(line);
+print(line);
+print("Sent by Yuvraj Converter");
+beepSequence(res);
+}
+});
 </script>
 
 </body>
